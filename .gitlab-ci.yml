@@ -1,0 +1,147 @@
+# GitLab CI/CD Configuration File
+# Generic Shell Project CI/CD Workflow
+
+stages:
+  - validate
+  - test
+  - deploy
+
+variables:
+  # ShellCheck version
+  SHELLCHECK_VERSION: "latest"
+  # Scripts directory
+  SCRIPTS_DIR: "scripts"
+
+# Cache ShellCheck image
+.shellcheck_template: &shellcheck_template
+  image: koalaman/shellcheck:${SHELLCHECK_VERSION}
+  before_script:
+    - apk add --no-cache git || true
+
+# Syntax checking and code quality checking
+shellcheck:
+  <<: *shellcheck_template
+  stage: validate
+  script:
+    - echo "Starting Shell script syntax checking..."
+    - |
+      find ${SCRIPTS_DIR} -type f -name "*.sh" | while read -r script; do
+        echo "Checking file: $script"
+        shellcheck -x "$script" || exit 1
+      done
+    - echo "All scripts passed the check!"
+  only:
+    - merge_requests
+    - develop
+    - staging
+    - main
+    - master
+  tags:
+    - shell
+
+# Run tests
+test:
+  stage: test
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash
+  script:
+    - echo "Starting test execution..."
+    - |
+      if [ -d "tests" ]; then
+        for test_file in tests/*.sh; do
+          if [ -f "$test_file" ]; then
+            echo "Running test: $test_file"
+            bash "$test_file" || exit 1
+          fi
+        done
+        echo "All tests passed!"
+      else
+        echo "Test directory not found, skipping tests"
+      fi
+  only:
+    - merge_requests
+    - develop
+    - staging
+    - main
+    - master
+  tags:
+    - shell
+
+# Deploy to development environment
+deploy-dev:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash git openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $DEV_SERVER_HOST >> ~/.ssh/known_hosts || true
+  script:
+    - echo "Deploying to development environment: $DEV_SERVER_HOST"
+    - |
+      # Add actual deployment scripts here
+      # Examples: rsync, scp, ansible, etc.
+      echo "Development environment deployment completed"
+  environment:
+    name: development
+    url: http://dev.example.com
+  only:
+    - develop
+  when: manual
+  tags:
+    - shell
+
+# Deploy to staging environment
+deploy-staging:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash git openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $STAGING_SERVER_HOST >> ~/.ssh/known_hosts || true
+  script:
+    - echo "Deploying to staging environment: $STAGING_SERVER_HOST"
+    - |
+      # Add actual deployment scripts here
+      echo "Staging environment deployment completed"
+  environment:
+    name: staging
+    url: http://staging.example.com
+  only:
+    - staging
+  when: manual
+  tags:
+    - shell
+
+# Deploy to production environment
+deploy-prod:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash git openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $PROD_SERVER_HOST >> ~/.ssh/known_hosts || true
+  script:
+    - echo "Deploying to production environment: $PROD_SERVER_HOST"
+    - |
+      # Add actual deployment scripts here
+      echo "Production environment deployment completed"
+  environment:
+    name: production
+    url: http://prod.example.com
+  only:
+    - main
+    - master
+  when: manual
+  tags:
+    - shell
+
